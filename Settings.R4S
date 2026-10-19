@@ -1,0 +1,7 @@
+﻿# PowerService path mappings, relative to this repository.
+SDK_ROOT=../../SDK
+CONTRACT_ROOT=../../Contract
+LIBRARIES_ROOT=../../Libraries
+DEVKIT_ROOT=../../../DevKit
+ARTIFACTS_ROOT=../../../Artifacts/Modules/PowerService
+ZIG_ROOT=Toolchains/Zig

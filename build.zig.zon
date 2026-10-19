@@ -1,0 +1,17 @@
+.{
+    .name = .r4os_powersvc,
+    .version = "0.1.0",
+    .fingerprint = 0x1d4e68a0a5c9dbbc,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        .r4os_sdk = .{
+            .url = "https://github.com/R4OSDev/r4os-sdk/archive/a3b7b62a6feaf9650d40bdaf71a3e23c90a5b8e8.tar.gz",
+            .hash = "r4os_sdk-0.64.45-NnPzAtNiFQEHNGIhQ0KI7tVmEPvOxp5IM01GMCfNgneD",
+        },
+        .r4os_libraries = .{
+            .url = "https://github.com/R4OSDev/r4os-libraries/archive/4f2087cc114582878845b7ed69776f5b31c5a88d.tar.gz",
+            .hash = "r4os_libraries-0.64.17-dH4fNXX6ggH8D0DatpfIxnHbH6PriWfiR_XRz5dxzlPS",
+        },
+    },
+    .paths = .{ "LICENSE", "NOTICE", "README.md", "Build.bat", "Build.sh", "Build.ps1", "build.zig", "build.zig.zon", "module.R4MF", "src" },
+}
