@@ -9,10 +9,12 @@ pub const Capabilities = struct {
     nominal: u32,
     efficient: u32,
     epp: bool,
+    limit: u32 = 255,
+    discrete: bool = false,
     current_limit: ?u32 = null,
 
     pub fn valid(self: Capabilities) bool {
-        return self.lowest != 0 and self.lowest <= self.highest and self.highest <= 255 and
+        return self.lowest != 0 and self.lowest <= self.highest and self.highest <= self.limit and
             (self.nominal == 0 or (self.nominal >= self.lowest and self.nominal <= self.highest)) and
             (self.efficient == 0 or (self.efficient >= self.lowest and self.efficient <= self.highest));
     }
@@ -25,7 +27,7 @@ pub fn request(profile: u32, caps: Capabilities) Error!a.CpuPerformanceRequest {
     if (!caps.valid()) return Error.Unsupported;
     var maximum = caps.highest;
     if (profile == a.power_profile_saving) {
-        maximum = if (caps.efficient != 0) caps.efficient else if (caps.nominal != 0) caps.nominal else return Error.EfficiencyUnknown;
+        maximum = if (caps.discrete) caps.lowest else if (caps.efficient != 0) caps.efficient else if (caps.nominal != 0) caps.nominal else return Error.EfficiencyUnknown;
     }
     if (caps.current_limit) |limit| {
         // CPPC CAP2 is a current advisory constraint, not a frequency. A
@@ -37,7 +39,7 @@ pub fn request(profile: u32, caps: Capabilities) Error!a.CpuPerformanceRequest {
         .operation = a.cpu_performance_op_apply,
         .minimum = caps.lowest,
         .maximum = maximum,
-        .desired = 0,
+        .desired = if (caps.discrete) @min(maximum, if (profile == a.power_profile_performance) caps.highest else caps.nominal) else 0,
         .epp = if (!caps.epp) 0 else switch (profile) {
             a.power_profile_balanced => 128,
             a.power_profile_performance => 0,

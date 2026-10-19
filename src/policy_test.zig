@@ -7,6 +7,7 @@ test {
     _ = @import("controller_test.zig");
     _ = @import("protocol_test.zig");
     _ = @import("workers_test.zig");
+    _ = @import("firmware_test.zig");
 }
 test "three profile intents use bounded abstract values and autonomous desired" {
     const caps: policy.Capabilities = .{ .lowest = 10, .highest = 200, .nominal = 150, .efficient = 40, .epp = true };

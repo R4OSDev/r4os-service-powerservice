@@ -35,18 +35,19 @@ const State = struct {
         } else self.info.provider_generation = 0;
         for (self.cells[0..self.info.configured_cpus], 0..) |*cell, cpu| {
             if (cell.live and cell.done.load(.acquire)) _ = cell.join(0);
-            const value = cell.snapshot();
+            const snapshot = cell.scoped();
+            const value = snapshot.view;
             var cap: a.CpuCapabilitiesInfo = .{};
             const online = self.dev.cpuCapabilities(@intCast(cpu), &cap) == 0 and cap.flags & a.cpu_capabilities_flag_schedulable != 0;
             const bit = @as(u64, 1) << @as(u6, @intCast(cpu));
+            const scope = if (value.backend >= a.power_profile_backend_acpi_cppc and snapshot.mask != 0) snapshot.mask else bit;
             if (cell.live) self.info.worker_count += 1;
-            if (value.flags & a.power_profile_cpu_flag_owned != 0) self.info.owned_mask |= bit;
-            if (value.flags & a.power_profile_cpu_flag_confirmed != 0 and value.applied_revision == self.info.revision) self.info.applied_mask |= bit;
+            if (value.flags & a.power_profile_cpu_flag_owned != 0) self.info.owned_mask |= scope;
+            if (value.flags & a.power_profile_cpu_flag_confirmed != 0 and value.applied_revision == self.info.revision) self.info.applied_mask |= scope;
             if ((cell.live and (self.quiesced or value.worker_state == a.power_profile_worker_held or value.worker_state == a.power_profile_worker_starting)) or
-                ((self.quiesced or value.state == a.power_profile_state_retained) and value.flags & a.power_profile_cpu_flag_owned != 0)) self.info.pending_mask |= bit;
+                ((self.quiesced or value.state == a.power_profile_state_retained) and value.flags & a.power_profile_cpu_flag_owned != 0)) self.info.pending_mask |= scope;
             if (online and value.backend != a.power_profile_backend_none and (value.valid_mask & a.power_profile_cpu_valid_range != 0 or value.state == a.power_profile_state_disabled)) {
-                self.info.supported_mask |= bit;
-                self.info.backend_cpus += 1;
+                self.info.supported_mask |= scope;
             }
             if (value.flags & a.power_profile_cpu_flag_sticky_enabled != 0) self.info.sticky_count += 1;
             if (value.last_error != 0) {
@@ -54,6 +55,7 @@ const State = struct {
                 self.info.last_cpu = @intCast(cpu);
             }
         }
+        self.info.backend_cpus = @popCount(self.info.supported_mask);
         if (self.info.sticky_count != 0) self.info.flags |= a.power_profile_flag_sticky_enabled;
         self.info.applied_revision = 0;
         if (self.info.pending_mask != 0) {

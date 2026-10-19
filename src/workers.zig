@@ -7,6 +7,7 @@ const a = r4os.abi;
 const control = @import("controller.zig");
 const backend = @import("backend.zig");
 pub const Cell = struct {
+    pub const Scoped = struct { view: a.PowerCpuProfileInfo, mask: u64 };
     lock: std.atomic.Value(bool) = .init(false),
     ready: std.atomic.Value(bool) = .init(false),
     stop: std.atomic.Value(bool) = .init(false),
@@ -18,6 +19,7 @@ pub const Cell = struct {
     dev: r4os.r4dev.Context = undefined,
     initial: a.PowerCpuProfileInfo = .{},
     published: a.PowerCpuProfileInfo = .{},
+    published_scope: u64 = 0,
     profile: u32 = 0,
     revision: u64 = 0,
     sticky: bool = false,
@@ -36,6 +38,18 @@ pub const Cell = struct {
         const value = self.published;
         self.lock.store(false, .release);
         return value;
+    }
+    pub fn scoped(self: *Cell) Scoped {
+        self.acquire();
+        const value: Scoped = .{ .view = self.published, .mask = self.published_scope };
+        self.lock.store(false, .release);
+        return value;
+    }
+    fn publishController(self: *Cell, controller: *const control.Controller) void {
+        self.acquire();
+        self.published = controller.view;
+        self.published_scope = controller.scope_mask;
+        self.lock.store(false, .release);
     }
     pub fn start(self: *Cell, sys: r4os.r4sys.Context, dev: r4os.r4dev.Context, initial: a.PowerCpuProfileInfo, profile: u32, revision: u64, sticky: bool) i32 {
         if (self.live or self.published.flags & a.power_profile_cpu_flag_owned != 0) return a.thread_error_busy;
@@ -123,7 +137,7 @@ fn entry(arg: u64) callconv(.c) i32 {
         }
         if (!controller.owns()) {
             controller.view.worker_state = a.power_profile_worker_complete;
-            cell.publish(controller.view);
+            cell.publishController(&controller);
             cell.done.store(true, .release);
             return 0;
         }
@@ -137,7 +151,7 @@ fn entry(arg: u64) callconv(.c) i32 {
                 refresh_at = cell.sys.ticks() +| refresh_ticks;
             }
         }
-        cell.publish(controller.view);
+        cell.publishController(&controller);
         // An explicit new return command can retry. A retained worker never
         // repeats parameter writes or discards a failed return automatically.
         cell.sys.sleepTicks(@max(@as(u64, 1), cell.sys.ticksFromMilliseconds(20)));

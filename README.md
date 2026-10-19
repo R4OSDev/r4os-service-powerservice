@@ -8,6 +8,26 @@ hardware parameters alone and creates no CPU workers. The other profiles are
 `balanced`, `performance` and `saving`, expressed in the backend's abstract
 performance units and optional energy/performance preference.
 
+After both direct providers report unsupported, the service may use CPUPOWER's
+separate ACPIPLAT backend. Disabled or uncertain direct control never triggers a
+competing firmware fallback. ACPI CPPC uses its declared abstract units; legacy
+P-states use nonzero ordering ranks, not MHz. PSS saving chooses the lowest
+declared rank, while balanced/performance choose the highest nominal declared
+state because PSS supplies no autonomous range/EPP controller.
+
+A firmware domain has one actual leader worker. Summary masks expand only its
+confirmed whole-domain receipt; follower rows do not invent independent tokens.
+The whole group remains reserved until original words and the real lease return
+are confirmed. Firmware catalogue withdrawal retains the controller's exact
+token for sensor-independent return. Unsupported transports and missing domains
+leave firmware parameters unchanged.
+
+The fixed common per-CPU profile record keeps its raw HWP/CPPC word meanings.
+Those words and request-valid bits remain unavailable for firmware. The
+controller keeps the independent `CpuFirmwareInfo` privately for exact parameter,
+firmware-generation and domain confirmation; `SYSINFO /CPUFW:<cpu>` exposes
+that separate receipt. Firmware fingerprints are never reported as raw MSRs.
+
 Use `SYSINFO /POWER` for intent and confirmed masks, `/POWER:balanced`,
 `/POWER:performance`, `/POWER:saving` or `/POWER:firmware` to select a profile,
 and `/POWERCPU:n` for an individual receipt. `quiesce`, `resume` and `reload`

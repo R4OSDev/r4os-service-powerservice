@@ -9,6 +9,8 @@ pub const Controller = struct {
     driver_state: u32 = a.cpu_performance_state_unsupported,
     caps: policy.Capabilities = .{ .lowest = 0, .highest = 0, .nominal = 0, .efficient = 0, .epp = false },
     enabled: bool = false,
+    scope_mask: u64 = 0,
+    firmware: ?a.CpuFirmwareInfo = null,
     quarantined: bool = false,
 
     pub fn init(cpu: u32, epoch: u64, generation: u64) Controller {
@@ -24,6 +26,11 @@ pub const Controller = struct {
         self.view.state = if (retain or self.owns()) a.power_profile_state_retained else a.power_profile_state_unsupported;
     }
     fn identity(self: *const Controller, value: backend.Observation) bool {
+        if (self.firmware) |previous| {
+            const current = value.firmware orelse return false;
+            if (current.firmware_generation == 0 or current.firmware_generation != previous.firmware_generation or
+                current.domain_mask != previous.domain_mask or current.descriptor_identity != previous.descriptor_identity) return false;
+        }
         return value.report.cpu_index == self.view.cpu_index and value.report.cpu_epoch == self.view.cpu_epoch and
             value.report.backend == self.view.backend and value.report.provider_generation != 0 and
             (self.view.provider_generation == 0 or value.report.provider_generation == self.view.provider_generation);
@@ -60,6 +67,8 @@ pub const Controller = struct {
         return true;
     }
     fn install(self: *Controller, value: backend.Observation) void {
+        self.firmware = value.firmware;
+        self.scope_mask = if (value.scope_mask != 0) value.scope_mask else @as(u64, 1) << @as(u6, @intCast(value.report.cpu_index));
         const profile = self.view.profile;
         const generation = self.view.service_generation;
         const applied = self.view.applied_revision;
@@ -79,6 +88,7 @@ pub const Controller = struct {
     }
     pub fn discover(self: *Controller, io: anytype) void {
         if (self.owns() or self.quarantined) return;
+        self.firmware = null;
         self.view.provider_generation = 0;
         self.view.flags = 0;
         self.view.backend = a.power_profile_backend_hwp;
@@ -86,6 +96,13 @@ pub const Controller = struct {
         if (value.rc == 0 and value.driver_state == a.cpu_performance_state_unsupported) {
             self.view.backend = a.power_profile_backend_cppc;
             value = io.call(self.view.backend, self.request(a.cpu_performance_op_inspect));
+        }
+        if (value.rc == 0 and value.driver_state == a.cpu_performance_state_unsupported) {
+            const fw = io.call(a.power_profile_backend_acpi_cppc, self.request(a.cpu_performance_op_inspect));
+            if (fw.rc != a.cpu_capabilities_error_unsupported and fw.rc != a.err_no_fn) {
+                self.view.backend = if (fw.rc == 0) fw.report.backend else a.power_profile_backend_acpi_cppc;
+                value = fw;
+            }
         }
         if (!self.accept(value, false)) return;
         self.view.state = if (self.driver_state == a.cpu_performance_state_disabled) a.power_profile_state_disabled else a.power_profile_state_unsupported;
@@ -96,9 +113,7 @@ pub const Controller = struct {
         const applied = self.view.applied_revision;
         if (!self.accept(io.call(self.view.backend, self.request(a.cpu_performance_op_inspect)), false)) return false;
         if (self.owns()) {
-            if (self.driver_state != a.cpu_performance_state_owned or self.view.valid_mask & a.power_profile_cpu_valid_request == 0 or
-                self.view.observed_request != self.view.last_written)
-            {
+            if (self.driver_state != a.cpu_performance_state_owned or !self.confirmedRequest()) {
                 self.fail(a.cpu_capabilities_error_busy, true);
                 return false;
             }
@@ -149,10 +164,7 @@ pub const Controller = struct {
         operation.lease = self.view.lease;
         operation.expected_revision = self.view.revision;
         if (!self.accept(io.call(self.view.backend, operation), true)) return;
-        if (!self.owns() or self.driver_state != a.cpu_performance_state_owned or self.view.valid_mask & a.power_profile_cpu_valid_request == 0 or
-            self.view.minimum != operation.minimum or self.view.maximum != operation.maximum or self.view.desired != operation.desired or
-            (operation.flags & a.cpu_performance_request_flag_epp != 0 and self.view.epp != operation.epp) or self.view.observed_request != self.view.last_written)
-        {
+        if (!self.owns() or self.driver_state != a.cpu_performance_state_owned or !self.confirmedRequest() or !self.matchesRequest(operation)) {
             self.fail(a.cpu_capabilities_error_busy, self.owns());
             return;
         }
@@ -187,5 +199,16 @@ pub const Controller = struct {
         self.view.state = a.power_profile_state_firmware;
         self.view.flags &= ~@as(u32, a.power_profile_cpu_flag_owned | a.power_profile_cpu_flag_confirmed);
         self.driver_state = value.driver_state;
+        self.firmware = value.firmware;
+    }
+    fn confirmedRequest(self: *const Controller) bool {
+        if (self.firmware) |raw| return raw.state == a.cpu_performance_state_owned and raw.valid_mask & a.cpu_firmware_valid_request != 0 and raw.last_error == 0 and raw.observed_request == raw.last_written;
+        return self.view.valid_mask & a.power_profile_cpu_valid_request != 0 and self.view.observed_request == self.view.last_written;
+    }
+    fn matchesRequest(self: *const Controller, operation: a.CpuPerformanceRequest) bool {
+        if (self.firmware) |raw| return raw.minimum == operation.minimum and raw.maximum == operation.maximum and raw.desired == operation.desired and
+            (operation.flags & a.cpu_performance_request_flag_epp == 0 or raw.epp == operation.epp);
+        return self.view.minimum == operation.minimum and self.view.maximum == operation.maximum and self.view.desired == operation.desired and
+            (operation.flags & a.cpu_performance_request_flag_epp == 0 or self.view.epp == operation.epp);
     }
 };
