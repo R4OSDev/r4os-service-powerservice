@@ -9,8 +9,8 @@
             .hash = "r4os_sdk-0.64.46-NnPzArV0FQGSWfd0QuOJjIxBYqWUrdBqIaPcR74w25Ef",
         },
         .r4os_libraries = .{
-            .url = "https://github.com/R4OSDev/r4os-libraries/archive/4f2087cc114582878845b7ed69776f5b31c5a88d.tar.gz",
-            .hash = "r4os_libraries-0.64.17-dH4fNXX6ggH8D0DatpfIxnHbH6PriWfiR_XRz5dxzlPS",
+            .url = "https://github.com/R4OSDev/r4os-libraries/archive/8e114508aaeb225dfd77070574290bc8595208e1.tar.gz",
+            .hash = "r4os_libraries-0.64.42-dH4fNcok2wGDV9E_ehLkawAWxkzPXEED23xX46dADis-",
         },
     },
     .paths = .{ "LICENSE", "NOTICE", "README.md", "Build.bat", "Build.sh", "Build.ps1", "build.zig", "build.zig.zon", "module.R4MF", "src" },
