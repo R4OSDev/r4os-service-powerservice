@@ -13,6 +13,8 @@ const State = struct {
     info: a.PowerProfileInfo = .{},
     quiesced: bool = false,
     cells: [64]workers.Cell = [_]workers.Cell{.{}} ** 64,
+    worker_wait: @import("worker_wait.zig").Waiter = .{},
+    return_error: i32 = 0,
 
     fn collect(self: *State) void {
         var capacity: a.CpuCapacity = .{};
@@ -24,7 +26,7 @@ const State = struct {
         self.info.worker_count = 0;
         self.info.sticky_count = 0;
         self.info.backend_cpus = 0;
-        self.info.last_error = 0;
+        self.info.last_error = self.return_error;
         self.info.last_cpu = a.cpu_power_cpu_none;
         self.info.flags = if (self.info.config_error == 0) a.power_profile_flag_config_valid else 0;
         var provider: a.CpuPowerInfo = .{};
@@ -75,11 +77,7 @@ const State = struct {
     fn returnWorkers(self: *State, budget: u64) bool {
         self.quiesced = true;
         for (self.cells[0..self.info.configured_cpus]) |*cell| cell.requestReturn();
-        const start = self.sys.ticks();
-        for (self.cells[0..self.info.configured_cpus]) |*cell| {
-            const elapsed = self.sys.ticks() -| start;
-            _ = cell.join(budget -| elapsed);
-        }
+        self.return_error = self.worker_wait.wait(&self.sys, self.cells[0..self.info.configured_cpus], budget);
         self.collect();
         return self.info.worker_count == 0 and self.info.owned_mask == 0 and self.info.pending_mask == 0;
     }
@@ -112,8 +110,8 @@ const State = struct {
 };
 var storage: State = undefined;
 
-pub fn r4_app_main(app: *r4os.App) i32 {
-    if (!r4std.init(app.startContext())) return a.err_no_group;
+pub fn r4_app_main(app: *r4os.App2) i32 {
+    if (!r4std.init2(app.raw)) return a.err_no_group;
     const sys = app.system();
     const args = std.mem.trim(u8, std.mem.span(sys.argsRaw()), " \t\r\n");
     if (std.ascii.eqlIgnoreCase(args, "/SELFTEST")) return @import("selftest.zig").run(sys);
@@ -121,7 +119,7 @@ pub fn r4_app_main(app: *r4os.App) i32 {
     const dev = app.devicesLowLevel() orelse return a.err_no_group;
     var capacity: a.CpuCapacity = .{};
     if (sys.cpuCapacity(&capacity) != 0 or capacity.configured_cpus == 0 or capacity.configured_cpus > 64) return a.service_api_result_invalid;
-    const id = std.math.cast(u32, app.startContext().instance_id) orelse return a.service_api_result_invalid;
+    const id = std.math.cast(u32, app.raw.instance_id) orelse return a.service_api_result_invalid;
     var own: a.ProgramProcessHandle = .{};
     if (sys.programOpenHandle(id, &own) != 0 or own.generation == 0) return a.service_api_result_invalid;
     storage = .{ .sys = sys, .dev = dev, .info = .{ .service_generation = own.generation, .service_instance_id = id, .revision = 1, .configured_cpus = capacity.configured_cpus, .online_cpus = capacity.available_cpus, .config_revision = 1 } };
@@ -130,8 +128,10 @@ pub fn r4_app_main(app: *r4os.App) i32 {
     state.info.config_error = loaded.rc;
     state.info.selected_profile = loaded.profile;
     var endpoint: a.ServiceInfo = .{};
-    var attempts: u32 = 0;
-    while (attempts < 100 and !sys.programShouldClose()) : (attempts += 1) {
+    const clock = r4os.inventory_reader.PlatformClock.fromContext2(&app.context) catch return a.err_no_fn;
+    var registration_budget = r4os.rpc_budget.Budget.fromTicks(clock.read, 100) catch |err| return r4os.rpc_budget.code(err);
+    while (!sys.programShouldClose()) {
+        _ = registration_budget.remainingTicks() catch break;
         if (sys.serviceEndpointRegister(name, 0, &endpoint) == 0 and endpoint.handle != 0) break;
         sys.sleepTicks(1);
     }
@@ -167,6 +167,9 @@ pub fn r4_app_main(app: *r4os.App) i32 {
         state.collect();
         sys.sleepTicks(@max(@as(u64, 1), sys.ticksFromMilliseconds(50)));
     }
+    // Keep the same resident service state until the creating Task's wait
+    // resources really close; a failed close is not a release receipt.
+    while (state.worker_wait.close() != 0) sys.sleepTicks(1);
     loop.report(name);
     sys.println("POWERSVC stopped: own CPU requests returned and workers joined");
     return result;

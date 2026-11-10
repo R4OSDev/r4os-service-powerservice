@@ -2,9 +2,9 @@ const std = @import("std");
 const r4os = @import("r4os");
 const a = r4os.abi;
 const Cell = @import("workers.zig").Cell;
-var table: a.R4XStartR4Sys = .{};
-var raw: a.R4XStartContext = .{};
-var bundle: r4os.program.Bundle = .{ .raw = &raw };
+var table: r4os.platform2.abi.R4XStartR4Sys2 = .{};
+var raw: r4os.platform2.abi.R4XStartContext2 = .{};
+var actual: r4os.platform2.Context = .{ .raw = &raw };
 var timeout = true;
 var calls: u32 = 0;
 var captured_entry: ?a.ThreadEntryFn = null;
@@ -30,8 +30,9 @@ fn join(handle: *const a.ProgramJoinHandle, budget: u64, out: *i32) callconv(.c)
 fn context() r4os.r4sys.Context {
     table = .{};
     table.thread_handle_join = @intFromPtr(&join);
-    bundle = .{ .raw = &raw, .sys = &table };
-    return r4os.r4sys.Context.init(&bundle);
+    actual = .{ .raw = &raw };
+    actual.tables[0] = @intFromPtr(&table);
+    return r4os.r4sys.Context.fromProgram(.{ .generation2 = &actual });
 }
 test "join timeout retains exact task handle and published hardware state; only actual join consumes the handle" {
     var cell: Cell = .{ .sys = context(), .live = true, .handle = .{ .thread_id = 19, .thread_generation = 0x12345678_abcd4321 }, .published = .{ .cpu_index = 2, .cpu_epoch = 7, .service_generation = 99 } };
@@ -67,7 +68,7 @@ test "failed hard placement survives the real worker entry stop gate without pro
     table.thread_create_handle = @intFromPtr(&create);
     table.thread_placement_set = @intFromPtr(&placement);
     var cell: Cell = .{};
-    try std.testing.expectEqual(a.thread_error_busy, cell.start(sys, r4os.r4dev.Context.init(&bundle), .{ .cpu_index = 2, .cpu_epoch = 7, .service_generation = 99 }, 1, 2, false));
+    try std.testing.expectEqual(a.thread_error_busy, cell.start(sys, r4os.r4dev.Context.fromProgram(.{ .generation2 = &actual }), .{ .cpu_index = 2, .cpu_epoch = 7, .service_generation = 99 }, 1, 2, false));
     try std.testing.expect(cell.live and cell.ready.load(.acquire) and cell.stop.load(.acquire));
     try std.testing.expectEqual(@as(i32, 0), captured_entry.?(captured_arg));
     const view = cell.snapshot();

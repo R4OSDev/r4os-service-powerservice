@@ -54,3 +54,15 @@ The `test` target checks the actual policy, receipt, protocol and join owners
 with simulated peers, without host CPU probes. `/SELFTEST` explicitly checks
 the live R4STD configuration and service IPC contracts without profile writes.
 Physical HWP/CPPC response needs separate qualification on supported hardware.
+
+Anschluss Generation2 (0.90.59)
+------------------------------
+Normale SDK196-Auswahl: SDK_PROFILE=r4os-zig-generation2, App2/R4XStart2 und
+Query2:2 fuer Plattformimporte. Unabhaengige R4STD-Interfaces behalten ihren
+eigenen Vertrag. Registrierung verwendet ein gemeinsames100Tick-Budget
+mit wirklicher Clock statt eines pro Versuch erneuerten Iterationsbudgets.
+
+POWERSVC behaelt seine CPU-/Provider-/Token-/Revisionbesitzer und die exakte Hardware-Rueckgabe. Ein residenter Waiter nutzt ein clockgebundenes Gesamtbudget und ein natives32Quellen-WaitSetfenster fuer bis64 vorhandene Cells; alle Cells werden bei jedem Wake exakt per Join0 geprueft. Readiness/Timeout/Closefehler geben keine Cell oder Hardwareleihe frei. Nur echter Join konsumiert den Taskhandle; ausstehende Hardwarequittung verhindert weiterhin einen erfolgreichen Dienststop. Derselbe WaitSethandle bleibt bei Closefehler zum Retry erhalten. Die technischen Warteobjekte gehoeren allein dem erzeugenden Haupttask.
+
+Build ueber ./Build.sh beziehungsweise Build.bat; beide verwenden dieselbe
+PowerShell7-Logik. Version, Klasse, Ziel und Imports stehen in module.R4MF.
