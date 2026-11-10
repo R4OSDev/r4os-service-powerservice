@@ -59,7 +59,10 @@ Anschluss Generation2 (0.90.59)
 ------------------------------
 Normale SDK196-Auswahl: SDK_PROFILE=r4os-zig-generation2, App2/R4XStart2 und
 Query2:2 fuer Plattformimporte. Unabhaengige R4STD-Interfaces behalten ihren
-eigenen Vertrag. Registrierung verwendet ein gemeinsames100Tick-Budget
+eigenen Vertrag.
+R4STD:Query2:2 ist neben den einzelnen Revision1-Interfaces als
+ausdruecklicher Bootstrapimport fuer init2 erforderlich.
+Registrierung verwendet ein gemeinsames100Tick-Budget
 mit wirklicher Clock statt eines pro Versuch erneuerten Iterationsbudgets.
 
 POWERSVC behaelt seine CPU-/Provider-/Token-/Revisionbesitzer und die exakte Hardware-Rueckgabe. Ein residenter Waiter nutzt ein clockgebundenes Gesamtbudget und ein natives32Quellen-WaitSetfenster fuer bis64 vorhandene Cells; alle Cells werden bei jedem Wake exakt per Join0 geprueft. Readiness/Timeout/Closefehler geben keine Cell oder Hardwareleihe frei. Nur echter Join konsumiert den Taskhandle; ausstehende Hardwarequittung verhindert weiterhin einen erfolgreichen Dienststop. Derselbe WaitSethandle bleibt bei Closefehler zum Retry erhalten. Die technischen Warteobjekte gehoeren allein dem erzeugenden Haupttask.
